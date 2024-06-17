@@ -1,4 +1,4 @@
-const { request } = require('undici')
+const { request, ProxyAgent } = require('undici')
 const countries = require('./countries.json');
 
 const errorsList = {
@@ -101,7 +101,7 @@ class GetSMS {
    * @param {InitProperties} - Options object
    * @throws Error
    */
-  constructor ({ key, url, secondUrl = 'https://smshub.org/api.php', service, lang = 'ru', interval = 2000, withoutCountryCode = false }) {
+  constructor ({ key, url, secondUrl = 'https://smshub.org/api.php', service, lang = 'ru', interval = 2000, withoutCountryCode = false, proxyUrl = null }) {
     if (!key || !url || !service) {
       throw new Error('Missing argument(s)')
     }
@@ -115,6 +115,7 @@ class GetSMS {
     this._service = service
     this._interval = interval
     this._withoutCountryCode = withoutCountryCode
+    this._proxyUrl = proxyUrl
 
     return new Proxy(this, {
       get (target, prop) {
@@ -153,12 +154,39 @@ class GetSMS {
       Object.assign(qs, { api_key: this._key })
     ).toString()
 
+    let dispatcher = {};
+    if (this._proxyUrl) {
+      const uri = new URL(this._proxyUrl);
+
+      const token =
+        "Basic " +
+        Buffer.from(`${uri.username}:${uri.password}`).toString("base64");
+
+      dispatcher = {
+        dispatcher : new ProxyAgent({
+          uri: uri,
+          //auth: Buffer.from(`${uri.username}:${uri.password}`).toString('base64'),
+          token: token,
+        }),
+      }
+    }
+
+    console.log(JSON.stringify({
+      method,
+      form: form ? new URLSearchParams(form).toString() : undefined,
+      headers: {
+        Cookie: 'lang=' + this._lang
+      },
+      ...dispatcher
+    }));
+
     return request(url, {
       method,
       form: form ? new URLSearchParams(form).toString() : undefined,
       headers: {
         Cookie: 'lang=' + this._lang
-      }
+      },
+      ...dispatcher
     })
       .then(data => data.body.text())
       .then(data => {
