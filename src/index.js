@@ -645,7 +645,7 @@ class GetSMS {
  * @throws Error
  */
 function getCountryId(country) {
-  if (!/^-?\d+$/.test(country) && 2 === country.length) {
+  if (!/^-?\d+$/.test(country) && 'number' !== typeof country && 2 === country.length) {
     const res = countries.find((el) => el.code === country)
     if (res) {
       return res.smsHubId
@@ -653,6 +653,7 @@ function getCountryId(country) {
       throw new Error('Country ID is not found by 2 letter symbol code')
     }
   }
+  return country;
 }
 
 module.exports = {
