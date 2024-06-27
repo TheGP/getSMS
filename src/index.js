@@ -116,6 +116,7 @@ class GetSMS {
     this._interval = interval
     this._withoutCountryCode = withoutCountryCode
     this._proxyUrl = proxyUrl
+    this._maxPrice = null;
 
     return new Proxy(this, {
       get (target, prop) {
@@ -408,16 +409,22 @@ class GetSMS {
    * @method
    * @public
    * @async
-   * @param {string} service - Service code name
-   * @param {string|number} maxPrice - Max buy price
+   * @param {string|number} maxPrice - Max buy price (for SmsHub in USD, no need to add country)
    * @param {boolean} random - Enable random number
-   * @param {string|number} country - Country ID
+   * @param {string|number|null} country - Country ID
    * @returns {Promise}
    * @throws Error
    * @throws ServiceApiError
    */
-  setMaxPrice (service, maxPrice, random = true, country) {
+  setMaxPrice (maxPrice, random = true, country = null) {
+
+    // For smshub it will be used during getNumber request
+    if ('smshub' === this._service) {
+      this._maxPrice = maxPrice;
+      return;
+    }
     country = getCountryId(country)
+
     return this._request({ action: 'setMaxPrice', service, maxPrice, country, random })
   }
 
