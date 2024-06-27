@@ -483,7 +483,7 @@ class GetSMS {
    * @public
    * @async
    * @param {string} service - Service code name
-   * @param {string} [operator] - Mobile operator code name
+   * @param {string|array}  [operators] - Mobile operator code name or multiple operators in array (will be choosen random + will be changed if no numbers)
    * @param {string|number} [country] - Country ID
    * @param {(string|number)} [forward] - Number forward, must be <code>1</code> or <code>0</code> *
    * @param {string} [phoneException] - Prefixes for excepting mobile numbers separated by comma *
@@ -492,27 +492,36 @@ class GetSMS {
    * @throws Error
    * @throws ServiceApiError
    */
-  getNumber (service, operator, country, forward, phoneException, ref) {
+  getNumber (service, operators, country, forward, phoneException, ref) {
     country = getCountryId(country)
-    
-    return this._request({ action: 'getNumber', service, operator, country, forward, phoneException, ref })
-      .then((response) => {
-        let [, id, number] = response.split(':')
+    const operator = Array.isArray(operators) ? operators[Math.floor(Math.random() * operators.length)] : operators;
 
-        // Removing country code if needed
-        if (this._withoutCountryCode) {
-          const countryObj = countries.find((el) => {
-            return el.smsHubId === country
-          })
-          // removing country number, but only if it is in the beginning of the string
-          number = number.replace(new RegExp('^' + countryObj.phoneCode), '')
-        }
+    return this._request({ action: 'getNumber', service, operator, country, forward, phoneException, ref, ...('smshub' === this._service && this._maxPrice !== null && { maxPrice: this._maxPrice, currency: 840 }) })
+    .then((response) => {
+      let [, id, number] = response.split(':')
 
-        return {
-          id,
-          number
-        }
-      })
+      // Removing country code if needed
+      if (this._withoutCountryCode) {
+        const countryObj = countries.find((el) => {
+          return el.smsHubId === country
+        })
+        // removing country number, but only if it is in the beginning of the string
+        number = number.replace(new RegExp('^' + countryObj.phoneCode), '')
+      }
+
+      return {
+        id,
+        number
+      }
+    })
+    .catch((e) => {
+      // If operators are array, trying again but excluding failed operator
+      if ('NO_NUMBERS' === e.code && 'string' !== typeof operators && 0 !== operators.length) {
+        return this.getNumber(service, operators.filter(value => value !== operator), country, forward, phoneException, ref);
+      } else {
+        throw e;
+      }
+    })
   }
 
   /**
