@@ -32,6 +32,9 @@ const supportedMethods = {
   smsactivate: [
     'getNumbersStatus', 'getBalance', 'getNumber', 'setStatus', 'getStatus', 'getPrices', 'getFullSms',
     'getAdditionalService', 'getCountries', 'getQiwiRequisites', 'getCode'
+  ],
+  smsbower: [
+    'getBalance', 'getNumber', 'setStatus', 'getStatus', 'getPrices', 'getCode', 'setMaxPrice'
   ]
 }
 
@@ -105,7 +108,7 @@ class GetSMS {
     if (!key || !url || !service) {
       throw new Error('Missing argument(s)')
     }
-    if (!['smshub', 'smsactivate'].includes(service)) {
+    if (!['smshub', 'smsactivate', 'smsbower'].includes(service)) {
       throw new Error('Invalid service name')
     }
     this._key = key
@@ -269,7 +272,7 @@ class GetSMS {
    * .getMultiServiceNumber(['ok','vk','vi','av'], 'mts', 0, [0, 1, 0, 0])
    */
   getMultiServiceNumber (service, operator, country, forward, ref) {
-    country = getCountryId(country)
+    country = this._getCountryId(country)
     if (Array.isArray(service)) service = service.toString()
     if (Array.isArray(forward)) forward = forward.toString()
     if (Array.isArray(operator)) operator = operator.toString()
@@ -419,11 +422,11 @@ class GetSMS {
   setMaxPrice (maxPrice, random = true, country = null) {
 
     // For smshub it will be used during getNumber request
-    if ('smshub' === this._service) {
+    if ('smshub' === this._service || 'smsbower' === this._service) {
       this._maxPrice = maxPrice;
       return;
     }
-    country = getCountryId(country)
+    country = this._getCountryId(country)
 
     return this._request({ action: 'setMaxPrice', service, maxPrice, country, random })
   }
@@ -492,11 +495,11 @@ class GetSMS {
    * @throws Error
    * @throws ServiceApiError
    */
-  getNumber (service, operators, country, forward, phoneException, ref) {
-    country = getCountryId(country)
+  getNumber (service, operators, country, forward, phoneException = '', ref = '') {
+    country = this._getCountryId(country);
     const operator = Array.isArray(operators) ? operators[Math.floor(Math.random() * operators.length)] : operators;
-
-    return this._request({ action: 'getNumber', service, operator, country, forward, phoneException, ref, ...('smshub' === this._service && this._maxPrice !== null && { maxPrice: this._maxPrice, currency: 840 }) })
+    
+    return this._request({ action: 'getNumber', service, operator, country, forward, phoneException, ref, ...(('smshub' === this._service || 'smsbower' === this._service) && this._maxPrice !== null && { maxPrice: this._maxPrice, currency: 840 }) })
     .then((response) => {
       let [, id, number] = response.split(':')
 
@@ -640,30 +643,36 @@ class GetSMS {
    * @throws ServiceApiError
    */
   getPrices (service, country) {
-    country = getCountryId(country)
+    country = this._getCountryId(country)
     return this._request({ action: 'getPrices', country, service })
+  }
+
+  /**
+   * Method for getting ID of the country by 2 letter code
+   * @method
+   * @private
+   * @param {string|number} [country] - Country ID or 2 letter symbol code
+   * @returns number
+   * @throws Error
+   */
+  _getCountryId(country) {
+    if (!/^-?\d+$/.test(country) && 'number' !== typeof country && 2 === country.length) {
+      const res = countries.find((el) => el.code === country)
+      if (res) {
+        console.log(`res`, JSON.stringify(res), this._service);
+        if ('smshub' === this._service) {
+          return res.smsHubId;
+        } else if ('smsbower' === this._service) {
+          return res.smsBowerId;
+        }
+      } else {
+        throw new Error('Country ID is not found by 2 letter symbol code')
+      }
+    }
+    return country;
   }
 }
 
-/**
- * Method for getting ID of the country by 2 letter code
- * @method
- * @private
- * @param {string|number} [country] - Country ID or 2 letter symbol code
- * @returns number
- * @throws Error
- */
-function getCountryId(country) {
-  if (!/^-?\d+$/.test(country) && 'number' !== typeof country && 2 === country.length) {
-    const res = countries.find((el) => el.code === country)
-    if (res) {
-      return res.smsHubId
-    } else {
-      throw new Error('Country ID is not found by 2 letter symbol code')
-    }
-  }
-  return country;
-}
 
 module.exports = {
   GetSMS,
