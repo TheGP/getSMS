@@ -656,7 +656,7 @@ class GetSMS {
    * @throws Error
    */
   _getCountryId(country) {
-    if (!/^-?\d+$/.test(country) && 'number' !== typeof country && 2 === country.length) {
+    if (!/^-?\d+$/.test(country) && 'number' !== typeof country && (2 === country.length || 'US_nonvirt' === country)) {
       const res = countries.find((el) => el.code === country)
       if (res) {
         console.log(`res`, JSON.stringify(res), this._service);
