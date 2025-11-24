@@ -1,4 +1,7 @@
 const { request, ProxyAgent } = require('undici')
+const { SocksProxyAgent } = require('socks-proxy-agent')
+const https = require('https')
+const http = require('http')
 const countries = require('./countries.json');
 
 const errorsList = {
@@ -158,32 +161,79 @@ class GetSMS {
       Object.assign(qs, { api_key: this._key })
     ).toString()
 
+    let useSocksProxy = false;
+    let socksAgent = null;
     let dispatcher = {};
+    
     if (this._proxyUrl) {
       const uri = new URL(this._proxyUrl);
 
-      const token =
-        "Basic " +
-        Buffer.from(`${uri.username}:${uri.password}`).toString("base64");
+      // Check if it's a SOCKS proxy
+      if (uri.protocol === 'socks:' || uri.protocol === 'socks4:' || uri.protocol === 'socks5:') {
+        // Use Node.js native request with SocksProxyAgent
+        useSocksProxy = true;
+        socksAgent = new SocksProxyAgent(this._proxyUrl);
+      } else {
+        // Use ProxyAgent for HTTP/HTTPS proxies with undici
+        const token =
+          "Basic " +
+          Buffer.from(`${uri.username}:${uri.password}`).toString("base64");
 
-      dispatcher = {
-        dispatcher : new ProxyAgent({
-          uri: uri,
-          //auth: Buffer.from(`${uri.username}:${uri.password}`).toString('base64'),
-          token: token,
-        }),
+        dispatcher = {
+          dispatcher : new ProxyAgent({
+            uri: uri,
+            token: token,
+          }),
+        }
       }
     }
 
-    console.log(JSON.stringify({
-      method,
-      form: form ? new URLSearchParams(form).toString() : undefined,
-      headers: {
-        Cookie: 'lang=' + this._lang
-      },
-      ...dispatcher
-    }));
+    // Use SOCKS proxy with Node.js native request
+    if (useSocksProxy) {
+      return new Promise((resolve, reject) => {
+        const requestModule = url.protocol === 'https:' ? https : http;
+        const options = {
+          method,
+          headers: {
+            Cookie: 'lang=' + this._lang
+          },
+          agent: socksAgent
+        };
 
+        if (form) {
+          const formData = new URLSearchParams(form).toString();
+          options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+          options.headers['Content-Length'] = Buffer.byteLength(formData);
+        }
+
+        const req = requestModule.request(url, options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              resolve(parsed);
+            } catch (e) {
+              if (!ServiceApiError._check(data)) {
+                resolve(data);
+              } else {
+                reject(new ServiceApiError(data));
+              }
+            }
+          });
+        });
+
+        req.on('error', reject);
+
+        if (form) {
+          req.write(new URLSearchParams(form).toString());
+        }
+
+        req.end();
+      });
+    }
+
+    // Use undici for non-SOCKS proxies or no proxy
     return request(url, {
       method,
       form: form ? new URLSearchParams(form).toString() : undefined,

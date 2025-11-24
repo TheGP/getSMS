@@ -10,6 +10,7 @@
     "remark": "npx remark README.md --use remark-preset-lint-consistent --use remark-preset-lint-recommended"
   },
   "dependencies": {
+    "socks-proxy-agent": "^8.0.5",
     "undici": "^5.28.4"
   },
   "devDependencies": {
